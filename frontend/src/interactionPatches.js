@@ -42,9 +42,22 @@ const handleInteractions = (event) => {
   }
 };
 
+const applyGlobalSearch = () => {
+  if (!window.location.pathname.startsWith('/dudas')) return;
+  const query = new URLSearchParams(window.location.search).get('search');
+  if (!query) return;
+  const normalized = query.toLowerCase();
+  document.querySelectorAll('[data-testid^="question-card-"]').forEach((card) => {
+    card.style.display = card.textContent.toLowerCase().includes(normalized) ? '' : 'none';
+  });
+};
+
 export const installInteractionPatches = () => {
   syncQuestions();
   window.setInterval(syncQuestions, 300);
   document.addEventListener('change', handleInteractions);
   document.addEventListener('click', handleInteractions);
+  const observer = new MutationObserver(applyGlobalSearch);
+  observer.observe(document.body, { childList: true, subtree: true });
+  applyGlobalSearch();
 };

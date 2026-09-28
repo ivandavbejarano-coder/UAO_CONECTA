@@ -3,6 +3,8 @@ export type Question = { id: string; title: string; subject: string; description
 export type Answer = { id: string; author: string; role: string; text: string; useful: number; solution?: boolean };
 export type Task = { id: string; name: string; responsible: string; due: string; status: 'Pendiente' | 'En proceso' | 'Completada' };
 export type Resource = { id: string; name: string; subject: string; type: string; description: string; date: string; saved?: boolean };
+export type Person = { id: string; name: string; role: 'Docente' | 'Monitor'; subject: string; availability: string; description: string };
+export type Group = { id: string; name: string; subject: string; members: number; description: string };
 
 export const subjects: Subject[] = [
   { id: 'calculo', name: 'Cálculo I', code: 'MAT-101', color: '#e5484d', progress: 72 },
@@ -36,4 +38,15 @@ export const notifications = [
   { id: 'n2', text: 'Tu grupo actualizó una tarea.', time: 'Hace 2 h', read: false },
   { id: 'n3', text: 'Se agregó un recurso en Programación.', time: 'Ayer', read: true },
   { id: 'n4', text: 'Se actualizó un horario común.', time: 'Ayer', read: true },
+];
+export const people: Person[] = [
+  { id: 'p1', name: 'Diana Salazar', role: 'Docente', subject: 'Cálculo I', availability: 'Lun y mié · 2–4 p. m.', description: 'Acompaña procesos de cálculo y preparación de parciales.' },
+  { id: 'p2', name: 'Jorge Cárdenas', role: 'Docente', subject: 'Programación', availability: 'Mar y jue · 10–12 m.', description: 'Orientación en fundamentos y estructuras de datos.' },
+  { id: 'p3', name: 'Mateo Gómez', role: 'Monitor', subject: 'Cálculo I', availability: 'Disponible ahora · Virtual', description: 'Integrales, límites y preparación para parciales.' },
+  { id: 'p4', name: 'Valentina Ruiz', role: 'Monitor', subject: 'Física I', availability: 'Disponible mañana · Presencial', description: 'Cinemática y resolución paso a paso de problemas.' },
+];
+export const groups: Group[] = [
+  { id: 'g1', name: 'Grupo Cálculo — Parcial 2', subject: 'Cálculo I', members: 4, description: 'Estudio semanal para preparar el segundo parcial.' },
+  { id: 'g2', name: 'Estructuras de datos', subject: 'Programación', members: 3, description: 'Práctica conjunta de listas, pilas y árboles.' },
+  { id: 'g3', name: 'Laboratorio de Física', subject: 'Física I', members: 5, description: 'Coordinación de pre y post laboratorio.' },
 ];
