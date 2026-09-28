@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Bell, Bookmark, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardList, FileText, Home as HomeIcon, Lightbulb, Menu, MessageCircle, Plus, Search, Send, Settings, ShieldCheck, Sparkles, UserRound, Users, X, ThumbsUp, ExternalLink } from 'lucide-react';
 import './App.css';
+import './fixes.css';
 import { subjects, initialQuestions, initialAnswers, initialTasks, resources as seedResources, notifications, type Question, type Answer, type Task, type Resource } from './data';
 
 const nav = [{to:'/', label:'Inicio', icon:HomeIcon}, {to:'/dudas', label:'Dudas', icon:CircleHelp}, {to:'/grupo', label:'Mi grupo', icon:Users}, {to:'/rutas', label:'Rutas', icon:Lightbulb}];

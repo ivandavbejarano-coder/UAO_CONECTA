@@ -1,0 +1,62 @@
+{
+  "summary": "Frontend-only E2E pass completed for Inicio, Dudas, Mi grupo, Rutas, Guardados, Notificaciones, reload persistence, and 375px responsive layout. Core creation, answering, solution marking, task, schedule, resource save, notification, navigation, and mobile flows passed; three functional issues remain.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Home activity list",
+        "issue": "Activity dots render as long red horizontal bars because the generic .activity-row span flex rule also applies to .activity-dot.",
+        "selector": ".activity-dot",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Dudas subject filter",
+        "issue": "Changing question-status-filter's sibling subject select to Programación leaves all four question cards visible; the control has no state/filter handler.",
+        "affected_selectors": ["[data-testid=question-subject-filter]", "[data-testid^=question-card-]"]
+      },
+      {
+        "flow": "Save newly created doubt then open Guardados",
+        "issue": "A newly created question can be saved, but Guardados only derives cards from initialQuestions, so the new question is missing despite its localStorage ID.",
+        "affected_selectors": ["[data-testid=detail-save-question]", "[data-testid=saved-questions-empty]"]
+      },
+      {
+        "flow": "Primary resource/file actions",
+        "issue": "Mi grupo/archivos Add file, View, and Save controls have data-testid values but no handlers; they are decorative buttons.",
+        "affected_selectors": ["[data-testid=add-file-button]", "[data-testid^=view-file-]", "[data-testid^=save-file-]", "[data-testid^=save-resource-]"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Inicio",
+        "issues": ["Activity indicators appear as stretched bars instead of circular dots, reducing visual clarity."]
+      }
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_1.json"],
+  "action_items": [
+    "Wire question-subject-filter into Doubts state and filtered query.",
+    "Make Saved derive questions from persisted uao-questions rather than only initialQuestions.",
+    "Implement or remove decorative file/resource action buttons; add behavior and persistence where required.",
+    "Constrain .activity-dot with flex: 0 0 9px (or equivalent) so it remains circular."
+  ],
+  "critical_code_review_comments": [
+    "Saved has a data consistency bug: it reads only initialQuestions while question creation persists to uao-questions.",
+    "The subject filter is rendered as an uncontrolled decorative select with no filtering behavior.",
+    "Several primary action buttons expose test IDs but have no onClick/onSubmit behavior, conflicting with the requirement that buttons not be decorative."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only request)",
+    "frontend": "78%"
+  },
+  "seed_data_creation": "Created localStorage-only TEST question, answer, and task during browser testing; no backend or seeded production data was modified.",
+  "retest_needed": true,
+  "should_call_test_agent_after_fix": true,
+  "context_for_next_testing_agent": "Tested against the public preview URL. Built-in doubt/resource saving persists across reload. Newly created doubt saving fails only when rendered through Guardados. Route selector for Recursos validados is support-route-recursos-validados. No horizontal overflow at 375px and no page error messages were observed.",
+  "rca of the issue": "Doubts and NewQuestion persist questions under uao-questions, but Saved filters the immutable initialQuestions import, excluding newly created records. The subject select is not connected to filter state. The activity-dot receives flex:1 from .activity-row span, stretching it across the row. Files action buttons are JSX buttons without event handlers or persistence state."
+}
