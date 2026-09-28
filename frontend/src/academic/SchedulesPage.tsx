@@ -1,0 +1,19 @@
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { CalendarDays, CheckCircle2, Plus } from 'lucide-react';
+import { toast } from 'sonner';
+import { req, type AuthUser } from '../auth';
+import { useAcademic } from './AcademicContext';
+import { useLocal, recordActivity } from './localStore';
+import { AcademicHead, Empty, ErrorNotice, GroupLinks } from './UI';
+import { colombiaInputISO, colombiaTime, nowISO } from './time';
+type Slot={id:string;starts_at:string;available_ids:string[];created_at:string};
+export default function SchedulesPage({user}:{user:AuthUser}) {
+  const {courses,refresh}=useAcademic();const [params,setParams]=useSearchParams();const courseId=params.get('course')||'';
+  const [local,setLocal]=useLocal<Slot[]>('uao-schedule',[],user.user_id);const [remote,setRemote]=useState<Slot[]>([]);const [date,setDate]=useState('');const [error,setError]=useState('');const [busy,setBusy]=useState(false);
+  useEffect(()=>{setError('');if(courseId)req<Slot[]>(`/api/courses/${courseId}/schedule`).then(setRemote).catch(e=>setError(e.message));},[courseId]);
+  const items=courseId?remote:local;const total=courseId?courses.find(c=>c.id===courseId)?.member_ids.length||0:1;
+  const add=async(e:React.FormEvent)=>{e.preventDefault();const start=colombiaInputISO(date);if(!start||new Date(start)<=new Date()){setError('Elige una fecha futura.');return;}setBusy(true);setError('');try{if(courseId){const s=await req<Slot>(`/api/courses/${courseId}/schedule`,{method:'POST',body:JSON.stringify({starts_at:start})});setRemote(ss=>[...ss,s]);await refresh();}else{setLocal(ss=>[...ss,{id:crypto.randomUUID(),starts_at:start,available_ids:[user.user_id],created_at:nowISO()}]);recordActivity(user.user_id,'Agregaste disponibilidad a tu agenda','/grupo/horarios');}setDate('');toast.success('Horario propuesto');}catch(e:any){setError(e.message);}finally{setBusy(false);}};
+  const toggle=async(s:Slot)=>{setBusy(true);try{if(courseId){const updated=await req<Slot>(`/api/courses/${courseId}/schedule/${s.id}`,{method:'POST'});setRemote(ss=>ss.map(x=>x.id===s.id?updated:x));}else{setLocal(ss=>ss.map(x=>x.id===s.id?{...x,available_ids:x.available_ids.length?[]:[user.user_id]}:x));}toast.success('Disponibilidad actualizada');}catch(e:any){setError(e.message);}finally{setBusy(false);}};
+  return <div className="content"><AcademicHead eyebrow="MI GRUPO · HORARIOS" title="Un momento para encontrarse."/><GroupLinks/><label className="field">Espacio de trabajo<select className="select" value={courseId} data-testid="schedule-course-select" onChange={e=>setParams(e.target.value?{course:e.target.value}:{})}><option value="">Mi agenda local</option>{courses.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}</select></label><form className="form section" onSubmit={add}><div className="field"><label htmlFor="schedule-date">Proponer horario · Colombia (UTC-5)</label><input id="schedule-date" type="datetime-local" data-testid="schedule-date-input" value={date} onChange={e=>setDate(e.target.value)} required/></div><button className="btn btn-dark" data-testid="add-schedule-button" disabled={busy}><Plus size={16}/>Agregar disponibilidad</button></form><ErrorNotice error={error}/><section className="section"><h2>{courseId?'Disponibilidad del grupo':'Agenda local'}</h2>{items.length?items.map(s=><button className={`quick schedule-item ${s.available_ids.includes(user.user_id)?'selected':''}`} key={s.id} data-testid={`schedule-option-${s.id}`} disabled={busy} onClick={()=>toggle(s)}><CalendarDays size={18}/><span>{colombiaTime(s.starts_at)}<small>{s.available_ids.length}/{total} disponibles {total>0&&s.available_ids.length===total?'· Horario común':''}</small></span>{s.available_ids.includes(user.user_id)&&<CheckCircle2 size={18}/>}</button>):<Empty>Aún no hay horarios propuestos.</Empty>}</section></div>;
+}

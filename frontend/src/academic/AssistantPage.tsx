@@ -1,0 +1,27 @@
+import { useEffect, useRef, useState } from 'react';
+import { Plus, Send, Sparkles } from 'lucide-react';
+import { API, req } from '../auth';
+import { AcademicHead, Empty, ErrorNotice, Loading } from './UI';
+import { colombiaTime } from './time';
+import type { AISession, AIMessage } from './types';
+
+export default function AssistantPage() {
+  const [sessions,setSessions]=useState<AISession[]>([]);const [selected,setSelected]=useState('');const [messages,setMessages]=useState<AIMessage[]>([]);
+  const [text,setText]=useState('');const [partial,setPartial]=useState('');const [pending,setPending]=useState('');const [busy,setBusy]=useState(false);const [loading,setLoading]=useState(true);const [error,setError]=useState('');
+  const end=useRef<HTMLDivElement>(null);const controller=useRef<AbortController|null>(null);
+  const refresh=()=>req<AISession[]>('/api/assistant/sessions').then(setSessions);
+  useEffect(()=>{refresh().catch(e=>setError(e.message)).finally(()=>setLoading(false));return()=>controller.current?.abort();},[]);
+  useEffect(()=>{if(!selected){setMessages([]);return;}let active=true;setLoading(true);setError('');req<AIMessage[]>(`/api/assistant/sessions/${selected}/messages`).then(rows=>{if(active)setMessages(rows);}).catch(e=>active&&setError(e.message)).finally(()=>active&&setLoading(false));return()=>{active=false;};},[selected]);
+  useEffect(()=>{end.current?.scrollIntoView({block:'nearest'});},[partial,messages.length,pending]);
+  const create=async()=>{const session=await req<AISession>('/api/assistant/sessions',{method:'POST'});setSessions(prev=>[session,...prev]);setSelected(session.id);setMessages([]);return session.id;};
+  const send=async(e:React.FormEvent)=>{e.preventDefault();if(!text.trim()||busy)return;setBusy(true);setError('');const prompt=text.trim();setPending(prompt);setPartial('');controller.current=new AbortController();let complete=false;
+    try{const id=selected||await create();const res=await fetch(`${API}/api/assistant/sessions/${id}/messages`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:prompt}),signal:controller.current.signal});if(!res.ok)throw new Error((await res.json()).detail||'No pudimos conectar con el asistente');if(!res.body)throw new Error('No se recibió respuesta');
+      const reader=res.body.getReader();const decoder=new TextDecoder();let buffer='';
+      while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let pos;while((pos=buffer.indexOf('\n\n'))!==-1){const part=buffer.slice(0,pos);buffer=buffer.slice(pos+2);if(!part.startsWith('data: '))continue;const event=JSON.parse(part.slice(6));if(event.error)throw new Error(event.error);if(event.delta)setPartial(p=>p+event.delta);if(event.done){complete=true;setMessages(prev=>[...prev,...event.messages]);setText('');setPending('');setPartial('');}}}
+      if(!complete)throw new Error('La respuesta se interrumpió. Puedes volver a intentarlo.');await refresh();
+    }catch(e:any){if(e.name!=='AbortError')setError(e.message||'No pudimos completar la respuesta');}finally{setBusy(false);setPending('');setPartial('');}
+  };
+  return <div className="content"><AcademicHead eyebrow="SABER A QUIÉN ACUDIR · ASISTENTE IA" title="Un apoyo para avanzar." action={<button className="btn btn-light" data-testid="ai-new-session" disabled={busy} onClick={()=>create().catch(e=>setError(e.message))}><Plus size={17}/>Nueva conversación</button>}/><div className="assistant-notice" data-testid="ai-disclaimer"><Sparkles size={18}/><span>Asistente IA · OpenAI. Puede equivocarse; no es una fuente oficial de la UAO.</span></div><ErrorNotice error={error}/>
+    <div className="chat-workspace assistant-workspace"><aside className="conversation-list"><h2>Historial del asistente</h2>{sessions.map(s=><button key={s.id} data-testid={`ai-session-${s.id}`} className={`conversation-item ${selected===s.id?'active':''}`} disabled={busy} onClick={()=>setSelected(s.id)}><Sparkles size={16}/><span>{s.title}<small>{colombiaTime(s.created_at)}</small></span></button>)}</aside><section className="conversation-main"><div className="message-log" data-testid="ai-message-log" role="log" aria-live="polite">{loading?<Loading/>:messages.length===0&&!busy?<Empty><Sparkles size={30}/><h2>¿En qué te puedo orientar?</h2><p>Asignaturas, estudio, tareas o vida universitaria.</p></Empty>:null}{messages.map(m=><article className={`chat-bubble ${m.role==='user'?'own':'ai-bubble'}`} data-testid={`ai-message-${m.id}`} key={m.id}><b>{m.role==='user'?'Tú':'Asistente IA'}</b><p>{m.content}</p><time>{colombiaTime(m.created_at)} · COL</time></article>)}{pending&&<article className="chat-bubble own" data-testid="ai-pending-user"><b>Tú</b><p>{pending}</p></article>}{busy&&<article className="chat-bubble ai-bubble" data-testid="ai-thinking"><b><Sparkles size={15}/> {partial?'Asistente IA':'Pensando…'}</b><p>{partial||'Preparando una respuesta'}</p></article>}<div ref={end}/></div><form className="message-composer" onSubmit={send}><label htmlFor="ai-text" className="sr-only">Pregunta al asistente</label><textarea id="ai-text" data-testid="ai-message-input" value={text} onChange={e=>setText(e.target.value)} placeholder="Pregunta al asistente…" maxLength={4000} disabled={busy} required/><button className="btn btn-primary" title="Enviar al asistente" data-testid="ai-send-button" disabled={busy||!text.trim()}><Send size={18}/><span className="sr-only">Enviar</span></button></form></section></div>
+  </div>;
+}

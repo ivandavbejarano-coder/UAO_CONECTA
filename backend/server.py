@@ -8,7 +8,7 @@ import uuid
 import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Literal
 from datetime import datetime, timezone, timedelta
 
 
@@ -46,7 +46,7 @@ PROGRAMS = [
     "Ingeniería Mecatrónica",
 ]
 
-USER_FIELDS = ["user_id", "email", "name", "picture", "custom_username", "program"]
+USER_FIELDS = ["user_id", "email", "name", "picture", "custom_username", "program", "role"]
 
 
 class User(BaseModel):
@@ -56,11 +56,13 @@ class User(BaseModel):
     picture: Optional[str] = None
     custom_username: Optional[str] = None
     program: Optional[str] = None
+    role: Optional[Literal['Estudiante', 'Monitor', 'Profesor']] = None
 
 
 class UsernameUpdate(BaseModel):
     custom_username: str
     program: Optional[str] = None
+    role: Optional[Literal['Estudiante', 'Monitor', 'Profesor']] = None
 
 
 # ---------- Auth helpers ----------
@@ -208,6 +210,10 @@ async def update_username(payload: UsernameUpdate,
     if existing:
         raise HTTPException(status_code=409, detail="Ese nombre ya está en uso")
     updates = {"custom_username": username}
+    if payload.role is not None:
+        if user.get('role') and payload.role != user['role']:
+            raise HTTPException(status_code=403, detail="El rol académico no se puede cambiar desde el perfil")
+        updates['role'] = payload.role
     if payload.program is not None:
         if payload.program not in PROGRAMS:
             raise HTTPException(status_code=400, detail="Programa de ingeniería no válido")
@@ -230,7 +236,22 @@ async def logout(response: Response,
     return {"ok": True}
 
 
+from academic import build_academic_router
+from assistant_api import build_assistant_router
+
 app.include_router(api_router)
+app.include_router(build_academic_router(db, get_current_user))
+app.include_router(build_assistant_router(db, get_current_user))
+
+
+@app.on_event('startup')
+async def create_academic_indexes():
+    await db.courses.create_index('id', unique=True)
+    await db.courses.create_index('invite_code', unique=True)
+    await db.chat_rooms.create_index('id', unique=True)
+    await db.chat_messages.create_index([('room_id', 1), ('created_at', -1)])
+    await db.ai_sessions.create_index('id', unique=True)
+    await db.ai_messages.create_index([('session_id', 1), ('created_at', 1)])
 
 app.add_middleware(
     CORSMiddleware,

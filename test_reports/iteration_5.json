@@ -1,0 +1,51 @@
+{
+  "summary": "Completed backend+frontend integration validation for UAO Conecta academic expansion using QA seeded identities and public preview URL. Backend regression suite passed (14/14). Frontend critical flows passed for onboarding role visibility, course create/edit/invite-rotate/join-by-URL, shared tasks/schedules, local dudas, resources, notifications persistence, responsive menu, and real assistant SSE multi-turn persistence.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/courses/join",
+        "issue": "API accepts invite code only; passing full invite URL directly to backend returns 404. Frontend works because it pre-parses URL and sends only code.",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Chats room selection without explicit room query",
+        "issue": "Automation had intermittent selection timeouts when opening room from list; direct URL /chats?room=<id> worked and real-time messaging succeeded both ways.",
+        "affected_selectors": [
+          "[data-testid^='chat-room-']"
+        ]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_academic_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Optionally support full invite URL parsing server-side in /api/courses/join for API-client parity with frontend behavior.",
+    "Quick manual sanity check on chat room click-selection (list click path) to confirm no real user-impact flakiness."
+  ],
+  "critical_code_review_comments": [
+    "Legacy test file /app/backend/tests/test_auth_api.py still contains URL fallback hardcode; this conflicts with env-only URL rule and should be cleaned in future test maintenance.",
+    "Join-by-link behavior currently relies on frontend normalization (CoursesPage); backend contract itself remains code-only."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_academic_api.py",
+    "/app/test_reports/iteration_5.json"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "90%"
+  },
+  "seed_data_creation": "Used existing QA seeded identities via /app/backend/seed_academic_qa.py. Created QA courses/tasks/schedule slots/messages/assistant sessions and local demo entries during UI runs.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Verified public app URL only. Chat end-to-end confirmed with two browser contexts using direct room query parameter and polling (3s) with no duplicate message observed. Assistant SSE worked for 2 turns and persisted across reload/new session. Notifications mark-as-read persisted across reload. Resource unsafe protocol rejected. Mobile menu contains required entries and closes on route change.",
+  "rca of the issue": "The only backend behavior gap found is join-by-full-URL at API level: /api/courses/join expects a code and performs upper/trim only. Frontend already mitigates this by extracting ?join= before request, so user-facing flow works."
+}

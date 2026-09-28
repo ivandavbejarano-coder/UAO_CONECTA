@@ -3,6 +3,10 @@
 Save this file for the testing agent to reference when validating auth-gated flows.
 
 ## Step 1: Create Test User & Session in Mongo
+For the academic expansion, use `python /app/backend/seed_academic_qa.py` and the identities/token environment keys documented in `/app/memory/test_credentials.md`. This reads MONGO_URL and DB_NAME from backend/.env. Onboarding now requires username, program and role. QA_NEW_TOKEN starts without all three; other QA accounts are ready.
+
+Test `/api/courses`, joins, owner-only management, shared-course direct chats, message persistence, expired/invalid sessions and private AI histories with different roles. Actual Google OAuth needs a real Google login; fixture cookies validate the authenticated application, not the external Google consent screen.
+
 ```bash
 mongosh --eval "
 use('test_database');

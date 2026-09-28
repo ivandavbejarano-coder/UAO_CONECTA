@@ -1,0 +1,9 @@
+export type Course = {id:string; name:string; code:string; description:string; owner_id:string; member_ids:string[]; invite_code:string; created_at:string};
+export type Member = {user_id:string; name:string; custom_username?:string; role?:string; program?:string};
+export type CourseTask = {id:string; name:string; responsible:string; due?:string; status:'Pendiente'|'En progreso'|'Completada'; creator_id:string; created_at:string};
+export type ChatRoom = {id:string; name:string; kind:'course'|'direct'; course_id?:string; participants:string[]};
+export type ChatMessage = {id:string; room_id:string; text:string; sender_id:string; sender_name:string; role:string; created_at:string};
+export type AcademicEvent = {id:string; text:string; path:string; created_at:string; read:boolean};
+export type AISession = {id:string; title:string; created_at:string};
+export type AIMessage = {id:string; session_id:string; role:'user'|'assistant'; content:string; created_at:string};
+export type Agreement = {id:string; text:string; author:string; created_at:string};

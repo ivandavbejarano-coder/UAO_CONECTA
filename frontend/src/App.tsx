@@ -1,13 +1,31 @@
-import { useEffect, useMemo, useRef, useState, createContext, useContext } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, createContext, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Bell, Bookmark, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardList, FileText, Home as HomeIcon, Lightbulb, LogOut, Menu, MessageCircle, Plus, Search, Send, ShieldCheck, Sparkles, UserRound, Users, X, ThumbsUp, ExternalLink } from 'lucide-react';
 import './App.css';
 import './fixes.css';
-import { subjects, initialQuestions, initialAnswers, initialTasks, resources as seedResources, notifications, people, groups, type Question, type Answer, type Task } from './data';
-import { authApi, PROGRAMS, type AuthUser } from './auth';
+import './academic/academic.css';
+import { subjects, initialQuestions, initialAnswers, initialTasks, resources as seedResources, notifications, people, groups, type Question, type Answer, type Task, type Resource } from './data';
+import { authApi, req, PROGRAMS, type AuthUser } from './auth';
+import { Toaster } from 'sonner';
+import { AcademicProvider, useAcademic } from './academic/AcademicContext';
+import { useLocal } from './academic/localStore';
+import { colombiaTime, colombiaToday } from './academic/time';
+import type { Member, AcademicEvent } from './academic/types';
+import CoursesPage from './academic/CoursesPage';
+import CourseDetail from './academic/CourseDetail';
+import ChatsPage from './academic/ChatsPage';
+import AssistantPage from './academic/AssistantPage';
+import GroupPage from './academic/GroupPage';
+import ActivityPage from './academic/ActivityPage';
+import { DoubtsPage, NewDoubtPage, DoubtDetailPage } from './academic/DoubtsPages';
+import FilesPage from './academic/FilesPage';
+import SavedPage from './academic/SavedPage';
+import SchedulesPage from './academic/SchedulesPage';
+import SupportPeoplePage from './academic/SupportPeoplePage';
+import ResourcesPage from './academic/ResourcesPage';
 
-const nav = [{to:'/', label:'Inicio', icon:HomeIcon}, {to:'/dudas', label:'Dudas', icon:CircleHelp}, {to:'/grupo', label:'Mi grupo', icon:Users}, {to:'/rutas', label:'Rutas', icon:Lightbulb}];
-const usePersist = <T,>(key:string, initial:T) => { const [value,setValue] = useState<T>(()=>{ try { const saved=localStorage.getItem(key); return saved ? JSON.parse(saved) : initial; } catch { return initial; }}); useEffect(()=>localStorage.setItem(key,JSON.stringify(value)),[key,value]); return [value,setValue] as const; };
+const nav = [{to:'/', label:'Inicio', icon:HomeIcon}, {to:'/asignaturas', label:'Asignaturas', icon:BookOpen}, {to:'/dudas', label:'Dudas', icon:CircleHelp}, {to:'/grupo', label:'Mi grupo', icon:Users}, {to:'/chats', label:'Chats', icon:MessageCircle}, {to:'/asistente', label:'Asistente IA', icon:Sparkles}, {to:'/rutas', label:'Rutas', icon:Lightbulb}];
+const usePersist = <T,>(key:string, initial:T) => {const {user}=useAuth();return useLocal(key,initial,user?.user_id||'guest');};
 const Icon = ({name}:{name:string}) => { const icons:any={BookOpen,CalendarDays,ClipboardList,FileText,MessageCircle,Users,Lightbulb,Search,Bell}; const C=icons[name]||Sparkles; return <C size={19}/>; };
 const initials = (name?:string|null) => (name||'U').split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
 
@@ -19,13 +37,13 @@ const useAuth = () => useContext(AuthContext);
 function AuthProvider({children}:{children:React.ReactNode}){
   const [user,setUser]=useState<AuthUser|null>(null);
   const [loading,setLoading]=useState(true);
-  const refresh = async () => { try { const u = await authApi.me(); setUser(u); } catch { setUser(null); } };
+  const refresh = useCallback(async () => { try { const u = await authApi.me(); setUser(u); } catch { setUser(null); } },[]);
   useEffect(()=>{
     // CRITICAL: If returning from OAuth callback, skip the /me check.
     // AuthCallback will exchange the session_id and establish the session first.
     if (window.location.hash?.includes('session_id=')) { setLoading(false); return; }
     (async ()=>{ await refresh(); setLoading(false); })();
-  },[]);
+  },[refresh]);
   const logout = async () => { try { await authApi.logout(); } catch{} setUser(null); };
   return <AuthContext.Provider value={{user,loading,refresh,logout}}>{children}</AuthContext.Provider>;
 }
@@ -34,6 +52,7 @@ function AuthProvider({children}:{children:React.ReactNode}){
 function Login(){
   // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
   const signIn = () => {
+    if(window.location.pathname==='/asignaturas'&&window.location.search)sessionStorage.setItem('uao-after-login',window.location.pathname+window.location.search);
     const redirectUrl = window.location.origin + '/';
     window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
   };
@@ -76,10 +95,10 @@ function AuthCallback(){
     const m = hash.match(/session_id=([^&]+)/);
     if (!m) { navigate('/', {replace:true}); return; }
     (async ()=>{
-      try { await authApi.exchangeSession(decodeURIComponent(m[1])); await refresh(); window.history.replaceState(null,'','/'); navigate('/', {replace:true}); }
+      try { await authApi.exchangeSession(decodeURIComponent(m[1])); await refresh(); const after=sessionStorage.getItem('uao-after-login');sessionStorage.removeItem('uao-after-login');const next=after?.startsWith('/asignaturas?join=')?after:'/';window.history.replaceState(null,'',next); navigate(next, {replace:true}); }
       catch(e:any){ setError(e.message || 'No pudimos iniciar sesión'); }
     })();
-  },[]);
+  },[location.hash,navigate,refresh]);
   return <div className="auth-shell"><div className="auth-card"><h1>Iniciando sesión…</h1><p className="muted">{error || 'Un momento, estamos validando tu cuenta.'}</p></div></div>;
 }
 
@@ -87,13 +106,14 @@ function AuthCallback(){
 function Onboarding(){
   const { user, refresh } = useAuth();
   const [name,setName] = useState(user?.custom_username||'');
-  const [program,setProgram] = useState('');
+  const [program,setProgram] = useState(user?.program||'');
+  const [role,setRole] = useState<AuthUser['role']>(user?.role||null);
   const [err,setErr] = useState('');
   const [busy,setBusy] = useState(false);
   const submit = async (e:React.FormEvent) => { e.preventDefault(); setErr('');
-    if(!program){ setErr('Selecciona tu programa de ingeniería.'); return; }
+    if(!program||!role){ setErr('Selecciona tu programa de ingeniería y tu rol.'); return; }
     setBusy(true);
-    try { await authApi.setUsername(name.trim(), program); await refresh(); } catch(ex:any){ setErr(ex.message); } finally { setBusy(false); }
+    try { await authApi.setUsername(name.trim(), program, role); await refresh(); } catch(ex:any){ setErr(ex.message); } finally { setBusy(false); }
   };
   return <div className="auth-shell"><div className="auth-card">
     <div className="eyebrow">BIENVENIDA A UAO CONECTA</div>
@@ -112,6 +132,7 @@ function Onboarding(){
           {PROGRAMS.map(p=><option key={p} value={p}>{p}</option>)}
         </select>
       </div>
+      <div className="field"><label htmlFor="onboarding-role">Rol académico</label><select id="onboarding-role" data-testid="onboarding-role-select" value={role||''} onChange={e=>setRole(e.target.value as AuthUser['role'])} required><option value="" disabled>Selecciona tu rol…</option><option>Estudiante</option><option>Monitor</option><option>Profesor</option></select><small className="muted" data-testid="role-self-declared-notice">Rol autodeclarado, sin verificación institucional. No podrás cambiarlo desde el perfil.</small></div>
       {err && <div className="form-note" style={{background:'#fde8e8',color:'#a1272b'}} data-testid="onboarding-error">{err}</div>}
       <button className="btn btn-primary" type="submit" disabled={busy} data-testid="submit-username-button">{busy ? 'Guardando…' : 'Continuar'}</button>
     </form>
@@ -119,35 +140,44 @@ function Onboarding(){
 }
 
 function Shell({children}:{children:React.ReactNode}) {
-  const unread=notifications.filter(n=>!n.read).length;
+  const {events}=useAcademic();
+  const [localEvents]=usePersist<AcademicEvent[]>('uao-events',[]);
+  const unread=[...events,...localEvents].filter(n=>!n.read).length;
+  const [mobileMenu,setMobileMenu]=useState(false);
+  const [today,setToday]=useState(colombiaToday());
+  const location=useLocation();
+  useEffect(()=>{setMobileMenu(false);},[location.pathname,location.search]);
+  useEffect(()=>{const timer=setInterval(()=>setToday(colombiaToday()),60000);return()=>clearInterval(timer);},[]);
   const { user, logout } = useAuth();
   const display = user?.custom_username || user?.name || 'Usuario';
   return <div className="shell">
     <aside className="sidebar">
-      <Link className="brand" to="/"><span className="brand-mark">U</span>UAO Conecta</Link>
+      <Link className="brand" to="/" data-testid="sidebar-brand"><span className="brand-mark">U</span>UAO Conecta</Link>
       <div className="nav-label">Tu espacio académico</div>
       <nav className="nav-list">{nav.map(n=><NavLink key={n.to} to={n.to} end={n.to==='/'} className="nav-item" data-testid={`sidebar-${n.label.toLowerCase().replace(' ','-')}`}><n.icon size={18}/>{n.label}</NavLink>)}</nav>
       <div className="nav-label secondary">Tu información</div>
       <nav className="nav-list">
         <NavLink to="/guardados" className="nav-item" data-testid="sidebar-guardados"><Bookmark size={18}/>Guardados</NavLink>
+        <NavLink to="/historial" className="nav-item" data-testid="sidebar-historial"><CalendarDays size={18}/>Historial</NavLink>
         <NavLink to="/notificaciones" className="nav-item" data-testid="sidebar-notificaciones"><Bell size={18}/>Notificaciones {unread>0&&<span className="notification-count">{unread}</span>}</NavLink>
       </nav>
       <Link to="/perfil" className="profile-mini" data-testid="sidebar-profile">
         <span className="avatar">{initials(display)}</span>
-        <span><b data-testid="sidebar-username">{display}</b><small data-testid="sidebar-program">{user?.program || 'Sin programa'}</small></span>
+        <span><b data-testid="sidebar-username">{display}</b><small data-testid="sidebar-role">{user?.role}</small><small data-testid="sidebar-program">{user?.program || 'Sin programa'}</small></span>
       </Link>
     </aside>
     <main className="main">
       <header className="topbar">
-        <button className="icon-btn mobile-only" data-testid="mobile-menu-button"><Menu size={18}/></button>
-        <span className="eyebrow">Miércoles, 13 de marzo</span>
+        <button className="icon-btn mobile-only" data-testid="mobile-menu-button" aria-label="Menú de navegación" aria-expanded={mobileMenu} onClick={()=>setMobileMenu(!mobileMenu)}>{mobileMenu?<X size={18}/>:<Menu size={18}/>}</button>
+        <span className="eyebrow" data-testid="header-colombia-date">{today} · COL</span>
         <Link className="icon-btn" to="/notificaciones" data-testid="header-notifications"><Bell size={18}/></Link>
         <Link className="avatar" to="/perfil" data-testid="header-profile">{initials(display)}</Link>
         <button className="icon-btn" onClick={logout} title="Cerrar sesión" data-testid="logout-button"><LogOut size={16}/></button>
       </header>
       {children}
     </main>
-    <nav className="bottom-nav">{nav.map(n=><NavLink key={n.to} to={n.to} end={n.to==='/'} data-testid={`bottom-${n.label.toLowerCase().replace(' ','-')}`}><n.icon size={19}/><span>{n.label}</span></NavLink>)}</nav>
+    {mobileMenu&&<nav className="mobile-drawer" data-testid="mobile-navigation-menu">{[...nav,{to:'/guardados',label:'Guardados',icon:Bookmark},{to:'/notificaciones',label:'Notificaciones',icon:Bell},{to:'/historial',label:'Historial',icon:CalendarDays},{to:'/perfil',label:'Perfil',icon:UserRound}].map(n=><NavLink key={n.to} to={n.to} data-testid={`mobile-menu-${n.to==='/'?'inicio':n.to.slice(1)}`}><n.icon size={18}/>{n.label}</NavLink>)}</nav>}
+    <nav className="bottom-nav">{nav.filter(n=>['/','/dudas','/grupo','/rutas'].includes(n.to)).map(n=><NavLink key={n.to} to={n.to} end={n.to==='/'} data-testid={`bottom-${n.label.toLowerCase().replace(' ','-')}`}><n.icon size={19}/><span>{n.label}</span></NavLink>)}<button className="bottom-more" data-testid="bottom-more-button" onClick={()=>setMobileMenu(!mobileMenu)}><Menu size={19}/><span>Más</span></button></nav>
   </div>;
 }
 
@@ -160,6 +190,15 @@ function PageHead({eyebrow,title,description,action}:{eyebrow:string;title:strin
 
 // ---------- Home w/ grouped search ----------
 function Home(){
+  const {courses,events,error:academicError}=useAcademic();
+  const [browse,setBrowse]=useState(false);
+  const [realPeople,setRealPeople]=useState<any[]>([]);
+  const [localEvents]=usePersist<AcademicEvent[]>('uao-events',[]);
+  const activity=[...events,...localEvents].sort((a,b)=>b.created_at.localeCompare(a.created_at));
+  const [customResources]=usePersist<Resource[]>('uao-custom-resources',[]);
+  const searchResources=useMemo(()=>[...customResources,...seedResources],[customResources]);
+  const searchSubjects=useMemo(()=>[...courses.map(c=>({id:c.id,name:c.name,code:c.code,color:'#1769aa',progress:0})),...subjects.filter(s=>!courses.some(c=>c.name===s.name))],[courses]);
+  useEffect(()=>{let active=true;Promise.all(courses.map(c=>req<Member[]>(`/api/courses/${c.id}/members`).then(ms=>ms.map(m=>({...m,id:`${c.id}-${m.user_id}`,name:m.custom_username||m.name,subject:c.name,description:m.program||'',availability:'Integrante de tu asignatura'}))))).then(rows=>active&&setRealPeople(rows.flat())).catch(()=>{if(active)setRealPeople([]);});return()=>{active=false;};},[courses]);
   const [q,setQ]=useState('');
   const [subjectFilter,setSubjectFilter]=useState('Todas');
   const [typeFilter,setTypeFilter]=useState('Todos');
@@ -177,21 +216,22 @@ function Home(){
 
     let dudas = questionsPersisted.filter(x => matches(`${x.title} ${x.description} ${x.subject} ${x.tags.join(' ')}`) && subjOk(x.subject) && statusOk(x.status));
     if (typeFilter!=='Todos' && typeFilter!=='Dudas') dudas = [];
-    let personas = people.filter(p => matches(`${p.name} ${p.subject} ${p.role} ${p.description}`) && subjOk(p.subject));
+    let personas = [...realPeople,...people].filter(p => matches(`${p.name} ${p.subject} ${p.role} ${p.description}`) && subjOk(p.subject));
     if (typeFilter!=='Todos' && typeFilter!=='Personas') personas = [];
-    let recursos = seedResources.filter(r => matches(`${r.name} ${r.subject} ${r.type} ${r.description}`) && subjOk(r.subject));
+    let recursos = searchResources.filter(r => matches(`${r.name} ${r.subject} ${r.type} ${r.description}`) && subjOk(r.subject));
     if (typeFilter!=='Todos' && typeFilter!=='Recursos') recursos = [];
-    let gruposList = groups.filter(g => matches(`${g.name} ${g.subject} ${g.description}`) && subjOk(g.subject));
+    let gruposList = [...courses.map(c=>({id:c.id,name:c.name,subject:c.name,members:c.member_ids.length,description:c.description})),...groups].filter(g => matches(`${g.name} ${g.subject} ${g.description}`) && subjOk(g.subject));
     if (typeFilter!=='Todos' && typeFilter!=='Grupos') gruposList = [];
-    let asignaturas = subjects.filter(s => matches(`${s.name} ${s.code}`) && (subjectFilter==='Todas' || s.name===subjectFilter));
+    let asignaturas = searchSubjects.filter(s => matches(`${s.name} ${s.code}`) && (subjectFilter==='Todas' || s.name===subjectFilter));
     if (typeFilter!=='Todos' && typeFilter!=='Asignaturas') asignaturas = [];
 
-    if (sort==='recientes') dudas = [...dudas].reverse();
+    if (sort==='recientes') dudas = [...dudas].sort((a,b)=>(Date.parse(b.date)||0)-(Date.parse(a.date)||0));
+    if(statusFilter!=='Todos'){personas=[];recursos=[];gruposList=[];asignaturas=[];}
     return { dudas, personas, recursos, grupos: gruposList, asignaturas };
-  }, [query, subjectFilter, typeFilter, statusFilter, sort, questionsPersisted]);
+  }, [query, subjectFilter, typeFilter, statusFilter, sort, questionsPersisted, courses, realPeople, searchSubjects, searchResources]);
 
   const total = filtered.dudas.length + filtered.personas.length + filtered.recursos.length + filtered.grupos.length + filtered.asignaturas.length;
-  const searching = query.length > 0 || subjectFilter!=='Todas' || typeFilter!=='Todos' || statusFilter!=='Todos';
+  const searching = browse || query.length > 0 || subjectFilter!=='Todas' || typeFilter!=='Todos' || statusFilter!=='Todos';
 
   return <div className="content">
     <section className="hero">
@@ -199,14 +239,16 @@ function Home(){
       <h1>Hola, ¿qué necesitas encontrar hoy?</h1>
       <p>Un punto de apoyo para avanzar en tus clases, coordinar con tu grupo y encontrar a la persona correcta.</p>
       <SearchBox value={q} onChange={setQ} placeholder="Buscar una asignatura, duda, recurso o ruta de apoyo…"/>
+      <button className="btn btn-light btn-small" style={{marginTop:14,position:'relative',zIndex:1}} data-testid="browse-search-filters" onClick={()=>setBrowse(!browse)}>{browse?'Cerrar exploración':'Explorar con filtros'}</button>
     </section>
+    {academicError&&<div className="academic-error" data-testid="home-academic-error">{academicError}</div>}
 
     {searching ? (
       <div className="section" data-testid="search-results">
         <div className="filters">
           <select className="select" value={subjectFilter} onChange={e=>setSubjectFilter(e.target.value)} data-testid="search-filter-subject">
             <option>Todas</option>
-            {subjects.map(s=><option key={s.id}>{s.name}</option>)}
+            {searchSubjects.map(s=><option key={s.id}>{s.name}</option>)}
           </select>
           <select className="select" value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} data-testid="search-filter-type">
             <option>Todos</option><option>Dudas</option><option>Personas</option><option>Recursos</option><option>Grupos</option><option>Asignaturas</option>
@@ -217,7 +259,7 @@ function Home(){
           <button className="btn btn-light btn-small" onClick={()=>setSort(sort==='recientes'?'relevantes':'recientes')} data-testid="search-sort-button">
             {sort==='recientes' ? 'Más recientes' : 'Más relevantes'} <ChevronRight size={14}/>
           </button>
-          {searching && <button className="btn btn-light btn-small" onClick={()=>{setQ('');setSubjectFilter('Todas');setTypeFilter('Todos');setStatusFilter('Todos');}} data-testid="clear-filters-button">Limpiar</button>}
+          {searching && <button className="btn btn-light btn-small" onClick={()=>{setQ('');setSubjectFilter('Todas');setTypeFilter('Todos');setStatusFilter('Todos');setBrowse(false);}} data-testid="clear-filters-button">Limpiar</button>}
         </div>
         <div className="section-title"><h2>{total} resultado{total===1?'':'s'} para “{query||'todo'}”</h2><span className="muted">Búsqueda agrupada</span></div>
 
@@ -243,7 +285,7 @@ function Home(){
           <div className="section-title"><h2>RECURSOS · {filtered.recursos.length}</h2><Link to="/rutas/recursos" className="muted">Ver recursos <ChevronRight size={14}/></Link></div>
           <div className="resource-grid">{filtered.recursos.map(r=><div className="resource" key={r.id} data-testid={`search-recurso-${r.id}`}>
             <div className="resource-top"><span className="tag">{r.type}</span></div>
-            <h3>{r.name}</h3><p>{r.description}</p><div className="meta"><span>{r.subject}</span><span>·</span><span>{r.date}</span></div>
+            <h3>{r.name}</h3><p>{r.description}</p><div className="meta"><span>{r.subject}</span><span>·</span><span>{colombiaTime(r.date)}</span></div><Link to="/rutas/recursos" className="btn btn-light btn-small" data-testid={`search-open-resource-${r.id}`}>Ver recurso</Link>
           </div>)}</div>
         </div>}
 
@@ -251,13 +293,13 @@ function Home(){
           <div className="section-title"><h2>GRUPOS · {filtered.grupos.length}</h2><Link to="/grupo" className="muted">Ver mi grupo <ChevronRight size={14}/></Link></div>
           <div className="resource-grid">{filtered.grupos.map(g=><div className="resource" key={g.id} data-testid={`search-grupo-${g.id}`}>
             <div className="resource-top"><span className="tag">{g.subject}</span><span className="muted">{g.members} integrantes</span></div>
-            <h3>{g.name}</h3><p>{g.description}</p>
+            <h3>{g.name}</h3><p>{g.description}</p><Link className="btn btn-light btn-small" data-testid={`search-open-group-${g.id}`} to={courses.some(c=>c.id===g.id)?`/grupo?course=${g.id}`:'/grupo'}>Abrir grupo</Link>
           </div>)}</div>
         </div>}
 
         {filtered.asignaturas.length>0 && <div className="search-group" data-testid="search-group-asignaturas">
           <div className="section-title"><h2>ASIGNATURAS · {filtered.asignaturas.length}</h2></div>
-          <div className="grid-subjects">{filtered.asignaturas.map(s=><Link to={`/dudas?subject=${s.name}`} className="subject" key={s.id} style={{borderTopColor:s.color}} data-testid={`search-asignatura-${s.id}`}>
+          <div className="grid-subjects">{filtered.asignaturas.map(s=><Link to={courses.some(c=>c.id===s.id)?`/asignaturas/${s.id}`:`/dudas?subject=${encodeURIComponent(s.name)}`} className="subject" key={s.id} style={{borderTopColor:s.color}} data-testid={`search-asignatura-${s.id}`}>
             <span className="eyebrow">{s.code}</span><h3>{s.name}</h3><span className="muted" style={{fontSize:12}}>Progreso del curso</span><div className="meter"><i style={{width:`${s.progress}%`,background:s.color}}/></div>
           </Link>)}</div>
         </div>}
@@ -265,14 +307,15 @@ function Home(){
     ) : (
       <>
         <div className="section">
-          <div className="section-title"><h2>MIS ASIGNATURAS</h2><span className="muted">Semestre 2024-1</span></div>
-          <div className="grid-subjects">{subjects.map(s=><Link to={`/dudas?subject=${s.name}`} className="subject" key={s.id} style={{borderTopColor:s.color}} data-testid={`subject-card-${s.id}`}>
-            <span className="eyebrow">{s.code}</span><h3>{s.name}</h3><span className="muted" style={{fontSize:12}}>Progreso del curso</span><div className="meter"><i style={{width:`${s.progress}%`,background:s.color}}/></div>
+          <div className="section-title"><h2>MIS ASIGNATURAS</h2><Link className="muted" to="/asignaturas" data-testid="home-manage-courses">Ver asignaturas <ChevronRight size={14}/></Link></div>
+          {!courses.length&&<div className="empty" data-testid="home-courses-empty">Aún no tienes asignaturas. <Link to="/asignaturas" data-testid="home-join-course">Unirme con un código</Link></div>}
+          <div className="grid-subjects">{courses.map(s=><Link to={`/asignaturas/${s.id}`} className="subject" key={s.id} data-testid={`subject-card-${s.id}`}>
+            <span className="eyebrow">{s.code}</span><h3>{s.name}</h3><span className="muted" style={{fontSize:12}}>{s.member_ids.length} integrantes</span>
           </Link>)}</div>
         </div>
         <div className="section">
           <div className="section-title"><h2>ACTIVIDAD RECIENTE</h2><Link to="/notificaciones" className="muted" data-testid="view-all-notifications">Ver todo <ChevronRight size={14}/></Link></div>
-          <div className="activity">{notifications.slice(0,4).map(n=><div className="activity-row" key={n.id}><span className="activity-dot"/><span>{n.text}</span><time>{n.time}</time></div>)}</div>
+          <div className="activity">{activity.slice(0,4).map(n=><Link to={n.path} data-testid={`home-activity-${n.id}`} className="activity-row" key={n.id}><span className="activity-dot"/><span>{n.text}</span><time>{colombiaTime(n.created_at)}</time></Link>)}</div>{activity.length===0&&<p className="muted" data-testid="home-activity-empty">No hay actividad reciente.</p>}
         </div>
         <div className="section">
           <div className="section-title"><h2>ACCESOS RÁPIDOS</h2></div>
@@ -311,6 +354,10 @@ function Resources(){const [saved,setSaved]=usePersist<string[]>('uao-saved-reso
 
 function Profile(){
   const { user, refresh } = useAuth();
+  const {courses}=useAcademic();
+  const [profileQuestions]=usePersist<Question[]>('uao-questions',initialQuestions);
+  const [savedQs]=usePersist<string[]>('uao-saved-questions',[]);
+  const [savedRs]=usePersist<string[]>('uao-saved-resources',[]);
   const [editing,setEditing]=useState(false);
   const [name,setName]=useState(user?.custom_username||'');
   const [program,setProgram]=useState(user?.program||'');
@@ -331,6 +378,7 @@ function Profile(){
             <h2 style={{fontFamily:'Space Grotesk',marginBottom:4}} data-testid="profile-name">{user?.custom_username || user?.name || 'Usuario'}</h2>
             <span className="muted">{user?.email}</span>
             <div style={{marginTop:8}}><span className="tag" data-testid="profile-program">{user?.program || 'Programa no definido'}</span></div>
+            <div style={{marginTop:8}}><span className="tag" data-testid="profile-role">{user?.role}</span><small className="muted" data-testid="profile-role-note"> · Rol autodeclarado</small></div>
             <button className="btn btn-light btn-small" style={{marginTop:12}} onClick={startEdit} data-testid="edit-username-button">Editar perfil</button>
           </>
         : <form className="form" onSubmit={save} style={{maxWidth:420}}>
@@ -348,9 +396,9 @@ function Profile(){
             </div>
           </form>}
       <div className="section">
-        <div className="stat-row"><div className="stat"><span className="eyebrow">ASIGNATURAS</span><strong>4</strong></div><div className="stat"><span className="eyebrow">DUDAS REALIZADAS</span><strong>12</strong></div><div className="stat"><span className="eyebrow">GUARDADOS</span><strong>8</strong></div></div>
+        <div className="stat-row"><div className="stat"><span className="eyebrow">ASIGNATURAS</span><strong data-testid="profile-course-count">{courses.length}</strong></div><div className="stat"><span className="eyebrow">DUDAS REALIZADAS</span><strong data-testid="profile-question-count">{profileQuestions.filter(q=>q.authorId===user?.user_id).length}</strong></div><div className="stat"><span className="eyebrow">GUARDADOS</span><strong data-testid="profile-saved-count">{savedQs.length+savedRs.length}</strong></div></div>
         <h3 className="eyebrow">MIS ASIGNATURAS</h3>
-        <div className="tags">{subjects.map(s=><span className="tag" key={s.id}>{s.name}</span>)}</div>
+        <div className="tags">{courses.map(s=><Link className="tag" key={s.id} to={`/asignaturas/${s.id}`} data-testid={`profile-course-${s.id}`}>{s.name}</Link>)}</div>{!courses.length&&<p className="muted" data-testid="profile-courses-empty">Aún no tienes asignaturas.</p>}
       </div>
     </div>
     {toast&&<Toast message={toast} onClose={()=>setToast('')}/>}
@@ -369,26 +417,32 @@ function AppRouter(){
   if (location.hash?.includes('session_id=')) return <AuthCallback/>;
   if (loading) return <div className="auth-shell"><div className="auth-card"><h1>Cargando…</h1></div></div>;
   if (!user) return <Login/>;
-  if (!user.custom_username || !user.program) return <Onboarding/>;
-  return <Shell><Routes>
+  if (!user.custom_username || !user.program || !user.role) return <Onboarding/>;
+  return <AcademicProvider key={user.user_id}><Shell><Routes>
     <Route path="/" element={<Home/>}/>
     <Route path="/inicio" element={<Home/>}/>
-    <Route path="/dudas" element={<Doubts/>}/>
-    <Route path="/dudas/nueva" element={<NewQuestion/>}/>
-    <Route path="/dudas/:id" element={<QuestionDetail/>}/>
-    <Route path="/grupo" element={<Group/>}/>
-    <Route path="/grupo/horarios" element={<Schedules/>}/>
-    <Route path="/grupo/tareas" element={<Group/>}/>
-    <Route path="/grupo/archivos" element={<Files/>}/>
+    <Route path="/asignaturas" element={<CoursesPage user={user}/>}/>
+    <Route path="/asignaturas/:id" element={<CourseDetail user={user}/>}/>
+    <Route path="/chats" element={<ChatsPage user={user}/>}/>
+    <Route path="/asistente" element={<AssistantPage/>}/>
+    <Route path="/historial" element={<ActivityPage user={user} history/>}/>
+    <Route path="/dudas" element={<DoubtsPage user={user}/>}/>
+    <Route path="/dudas/nueva" element={<NewDoubtPage user={user}/>}/>
+    <Route path="/dudas/:id" element={<DoubtDetailPage user={user}/>}/>
+    <Route path="/grupo" element={<GroupPage user={user}/>}/>
+    <Route path="/grupo/horarios" element={<SchedulesPage user={user}/>}/>
+    <Route path="/grupo/tareas" element={<GroupPage user={user}/>}/>
+    <Route path="/grupo/archivos" element={<FilesPage user={user}/>}/>
     <Route path="/rutas" element={<RoutesPage/>}/>
-    <Route path="/rutas/docente" element={<PeoplePage kind="docente"/>}/>
-    <Route path="/rutas/monitor" element={<PeoplePage kind="monitor"/>}/>
-    <Route path="/rutas/recursos" element={<Resources/>}/>
+    <Route path="/rutas/docente" element={<SupportPeoplePage kind="docente"/>}/>
+    <Route path="/rutas/monitor" element={<SupportPeoplePage kind="monitor"/>}/>
+    <Route path="/rutas/recursos" element={<ResourcesPage user={user}/>}/>
     <Route path="/perfil" element={<Profile/>}/>
-    <Route path="/notificaciones" element={<Notifications/>}/>
-    <Route path="/guardados" element={<Saved/>}/>
-  </Routes></Shell>;
+    <Route path="/notificaciones" element={<ActivityPage user={user}/>}/>
+    <Route path="/guardados" element={<SavedPage user={user}/>}/>
+    <Route path="*" element={<div className="content"><h1>Página no encontrada</h1><Link to="/" data-testid="not-found-home">Volver a Inicio</Link></div>}/>
+  </Routes></Shell></AcademicProvider>;
 }
 
-function App(){ return <BrowserRouter><AuthProvider><AppRouter/></AuthProvider></BrowserRouter>; }
+function App(){ return <BrowserRouter><AuthProvider><AppRouter/><Toaster position="top-center" richColors/></AuthProvider></BrowserRouter>; }
 export default App;

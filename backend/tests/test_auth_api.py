@@ -10,8 +10,9 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 load_dotenv(Path(__file__).parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / 'frontend' / '.env')
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL") or "https://uao-conecta.preview.emergentagent.com"
+BASE_URL = os.environ["REACT_APP_BACKEND_URL"]
 BASE_URL = BASE_URL.rstrip("/")
 API = f"{BASE_URL}/api"
 

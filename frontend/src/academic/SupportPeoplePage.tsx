@@ -1,0 +1,15 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { MessageCircle, UserRound, X } from 'lucide-react';
+import { req } from '../auth';
+import { people } from '../data';
+import { useAcademic } from './AcademicContext';
+import { AcademicHead, ErrorNotice } from './UI';
+import type { Member, ChatRoom } from './types';
+export default function SupportPeoplePage({kind}:{kind:'docente'|'monitor'}) {
+  const {courses}=useAcademic();const navigate=useNavigate();const [real,setReal]=useState<Member[]>([]);const [view,setView]=useState<any>(null);const [error,setError]=useState('');
+  useEffect(()=>{let active=true;Promise.all(courses.map(c=>req<Member[]>(`/api/courses/${c.id}/members`))).then(rows=>{if(active)setReal([...new Map(rows.flat().map(m=>[m.user_id,m])).values()]);}).catch(e=>active&&setError(e.message));return()=>{active=false;};},[courses]);
+  const list=real.filter(p=>p.role===(kind==='docente'?'Profesor':'Monitor'));const demo=people.filter(p=>p.role.toLowerCase()===kind);
+  const chat=async(user_id:string)=>{try{const room=await req<ChatRoom>('/api/chats/direct',{method:'POST',body:JSON.stringify({user_id})});navigate(`/chats?room=${room.id}`);}catch(e:any){setError(e.message);}};
+  return <div className="content"><AcademicHead eyebrow={`RUTAS · ${kind.toUpperCase()}`} title={kind==='docente'?'Habla con tu docente.':'Encuentra apoyo de un monitor.'}/><ErrorNotice error={error}/><div className="people-grid">{list.map(p=><article className="resource" key={p.user_id} data-testid={`support-person-${p.user_id}`}><UserRound size={23}/><h3>{p.custom_username||p.name}</h3><p>{p.program}</p><span className="tag">{p.role} · Rol autodeclarado</span><div className="button-row"><button className="btn btn-primary btn-small" data-testid={`contact-person-${p.user_id}`} onClick={()=>chat(p.user_id)}><MessageCircle size={15}/>Conversar</button></div></article>)}</div><section className="section"><h2>Ejemplos de rutas de apoyo</h2><p className="muted">Personas de demostración, sin contacto real ni vínculo oficial.</p><div className="people-grid">{demo.map(p=><article className="resource" key={p.id}><h3>{p.name}</h3><span className="tag">{p.role} · {p.subject}</span><p>{p.description}</p><div className="button-row"><button className="btn btn-light btn-small" data-testid={`view-person-${p.id}`} onClick={()=>setView(p)}>Ver perfil</button><button className="btn btn-light btn-small" data-testid={`contact-person-${p.id}`} onClick={()=>setView(p)}>Ver ruta de contacto</button></div></article>)}</div></section>{view&&<div className="resource-dialog-overlay"><section className="resource-dialog" role="dialog" aria-modal="true" aria-label="Perfil de demostración" data-testid="demo-person-dialog"><button className="icon-btn" title="Cerrar perfil" data-testid="close-person-dialog" onClick={()=>setView(null)}><X size={16}/></button><h2>{view.name}</h2><p>{view.description}</p><p>Perfil de demostración. Para contactar a un docente o monitor real, consulta los integrantes de tus asignaturas o el directorio oficial de la universidad.</p></section></div>}</div>;
+}

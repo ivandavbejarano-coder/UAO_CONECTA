@@ -1,10 +1,14 @@
 export type Subject = { id: string; name: string; code: string; color: string; progress: number };
-export type Question = { id: string; title: string; subject: string; description: string; date: string; answers: number; status: 'Sin respuesta' | 'En discusión' | 'Resuelta'; author: string; tags: string[]; saved?: boolean };
-export type Answer = { id: string; author: string; role: string; text: string; useful: number; solution?: boolean };
-export type Task = { id: string; name: string; responsible: string; due: string; status: 'Pendiente' | 'En proceso' | 'Completada' };
-export type Resource = { id: string; name: string; subject: string; type: string; description: string; date: string; saved?: boolean };
+export type Question = { id: string; title: string; subject: string; description: string; date: string; answers: number; status: 'Sin respuesta' | 'En discusión' | 'Resuelta'; author: string; tags: string[]; saved?: boolean; authorId?:string; role?:string };
+export type Answer = { id: string; author: string; role: string; text: string; useful: number; solution?: boolean; date?:string };
+export type Task = { id: string; name: string; responsible: string; due: string; status: 'Pendiente' | 'En proceso' | 'Completada'; created_at?:string };
+export type Resource = { id: string; name: string; subject: string; type: string; description: string; date: string; saved?: boolean; url?:string };
 export type Person = { id: string; name: string; role: 'Docente' | 'Monitor'; subject: string; availability: string; description: string };
 export type Group = { id: string; name: string; subject: string; members: number; description: string };
+
+// Demo timestamps reflect when this browser first created the example collection.
+const demoCreatedAt = localStorage.getItem('uao-demo-created-at') || new Date().toISOString();
+localStorage.setItem('uao-demo-created-at', demoCreatedAt);
 
 export const subjects: Subject[] = [
   { id: 'calculo', name: 'Cálculo I', code: 'MAT-101', color: '#e5484d', progress: 72 },
@@ -13,32 +17,28 @@ export const subjects: Subject[] = [
   { id: 'matematicas', name: 'Matemáticas', code: 'MAT-105', color: '#b7791f', progress: 84 },
 ];
 export const initialQuestions: Question[] = [
-  { id: 'q1', title: '¿Cómo puedo entender el cambio de variable?', subject: 'Cálculo I', description: 'Me pierdo al elegir la sustitución correcta en integrales. ¿Alguien podría explicarme un método para identificarla?', date: 'Hoy, 09:42', answers: 4, status: 'En discusión', author: 'Sofía M.', tags: ['integrales', 'parcial'] },
-  { id: 'q2', title: 'Error de punteros en el ejercicio 3', subject: 'Programación', description: 'El programa compila pero no devuelve el resultado esperado cuando la lista está vacía.', date: 'Ayer', answers: 2, status: 'Resuelta', author: 'Anónimo', tags: ['C++', 'listas'] },
-  { id: 'q3', title: '¿Qué representa la aceleración angular?', subject: 'Física I', description: 'Busco una explicación intuitiva para conectar la fórmula con un ejemplo real.', date: '12 mar', answers: 0, status: 'Sin respuesta', author: 'Daniel R.', tags: ['cinemática'] },
-  { id: 'q4', title: 'Preparación para el segundo parcial', subject: 'Matemáticas', description: '¿Qué recursos recomiendan para practicar series y sucesiones?', date: '10 mar', answers: 7, status: 'En discusión', author: 'Laura P.', tags: ['parcial', 'series'] },
+  { id: 'q1', title: '¿Cómo puedo entender el cambio de variable?', subject: 'Cálculo I', description: 'Me pierdo al elegir la sustitución correcta en integrales. ¿Alguien podría explicarme un método para identificarla?', date: demoCreatedAt, answers: 2, status: 'En discusión', author: 'Sofía M.', tags: ['integrales', 'parcial'] },
+  { id: 'q2', title: 'Error de punteros en el ejercicio 3', subject: 'Programación', description: 'El programa compila pero no devuelve el resultado esperado cuando la lista está vacía.', date: demoCreatedAt, answers: 1, status: 'Resuelta', author: 'Anónimo', tags: ['C++', 'listas'] },
+  { id: 'q3', title: '¿Qué representa la aceleración angular?', subject: 'Física I', description: 'Busco una explicación intuitiva para conectar la fórmula con un ejemplo real.', date: demoCreatedAt, answers: 0, status: 'Sin respuesta', author: 'Daniel R.', tags: ['cinemática'] },
+  { id: 'q4', title: 'Preparación para el segundo parcial', subject: 'Matemáticas', description: '¿Qué recursos recomiendan para practicar series y sucesiones?', date: demoCreatedAt, answers: 0, status: 'Sin respuesta', author: 'Laura P.', tags: ['parcial', 'series'] },
 ];
 export const initialAnswers: Record<string, Answer[]> = {
   q1: [{ id: 'a1', author: 'Mateo G.', role: 'Monitor', text: 'Piensa en qué parte de la expresión se deriva de forma sencilla. Esa suele ser una buena candidata para u.', useful: 8 }, { id: 'a2', author: 'Camila R.', role: 'Estudiante', text: 'A mí me ayudó escribir primero la integral como producto y revisar ejemplos resueltos.', useful: 3 }],
   q2: [{ id: 'a3', author: 'Andrés V.', role: 'Monitor', text: 'Recuerda validar el puntero antes de acceder a la posición. Comparte un fragmento si aún falla.', useful: 11, solution: true }],
 };
 export const resources: Resource[] = [
-  { id: 'r1', name: 'Guía de integrales — unidad 2', subject: 'Cálculo I', type: 'Guía', description: 'Ejercicios progresivos para practicar sustitución e integración por partes.', date: 'Actualizado hace 2 días' },
-  { id: 'r2', name: 'Mapa de estructuras de datos', subject: 'Programación', type: 'Apunte', description: 'Resumen visual de listas, pilas, colas y árboles.', date: 'Actualizado hace 1 semana' },
-  { id: 'r3', name: 'Laboratorio de movimiento circular', subject: 'Física I', type: 'Material de estudio', description: 'Prelaboratorio con conceptos clave y preguntas guía.', date: 'Actualizado hace 2 semanas' },
-  { id: 'r4', name: 'Banco de problemas de series', subject: 'Matemáticas', type: 'Documento', description: 'Colección local de problemas para preparar el parcial.', date: 'Actualizado hace 3 semanas' },
+  { id: 'r1', name: 'Guía de integrales — unidad 2', subject: 'Cálculo I', type: 'Guía', description: 'Ejercicios progresivos para practicar sustitución e integración por partes.', date: demoCreatedAt },
+  { id: 'r2', name: 'Mapa de estructuras de datos', subject: 'Programación', type: 'Apunte', description: 'Resumen visual de listas, pilas, colas y árboles.', date: demoCreatedAt },
+  { id: 'r3', name: 'Laboratorio de movimiento circular', subject: 'Física I', type: 'Material de estudio', description: 'Prelaboratorio con conceptos clave y preguntas guía.', date: demoCreatedAt },
+  { id: 'r4', name: 'Banco de problemas de series', subject: 'Matemáticas', type: 'Documento', description: 'Colección local de problemas para preparar el parcial.', date: demoCreatedAt },
 ];
+Object.values(initialAnswers).forEach(list=>list.forEach(answer=>{answer.date=demoCreatedAt;}));
 export const initialTasks: Task[] = [
-  { id: 't1', name: 'Resolver ejercicios 4–8', responsible: 'Sofía', due: '18 mar', status: 'En proceso' },
-  { id: 't2', name: 'Compartir apuntes del laboratorio', responsible: 'Daniel', due: '20 mar', status: 'Pendiente' },
-  { id: 't3', name: 'Preparar presentación', responsible: 'Laura', due: '22 mar', status: 'Completada' },
+  { id: 't1', name: 'Resolver ejercicios 4–8', responsible: 'Sofía', due: '', status: 'En proceso', created_at: demoCreatedAt },
+  { id: 't2', name: 'Compartir apuntes del laboratorio', responsible: 'Daniel', due: '', status: 'Pendiente', created_at: demoCreatedAt },
+  { id: 't3', name: 'Preparar presentación', responsible: 'Laura', due: '', status: 'Completada', created_at: demoCreatedAt },
 ];
-export const notifications = [
-  { id: 'n1', text: 'Mateo respondió tu duda de Cálculo.', time: 'Hace 18 min', read: false },
-  { id: 'n2', text: 'Tu grupo actualizó una tarea.', time: 'Hace 2 h', read: false },
-  { id: 'n3', text: 'Se agregó un recurso en Programación.', time: 'Ayer', read: true },
-  { id: 'n4', text: 'Se actualizó un horario común.', time: 'Ayer', read: true },
-];
+export const notifications: {id:string;text:string;time:string;read:boolean}[] = [];
 export const people: Person[] = [
   { id: 'p1', name: 'Diana Salazar', role: 'Docente', subject: 'Cálculo I', availability: 'Lun y mié · 2–4 p. m.', description: 'Acompaña procesos de cálculo y preparación de parciales.' },
   { id: 'p2', name: 'Jorge Cárdenas', role: 'Docente', subject: 'Programación', availability: 'Mar y jue · 10–12 m.', description: 'Orientación en fundamentos y estructuras de datos.' },
