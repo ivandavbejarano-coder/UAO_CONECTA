@@ -35,16 +35,32 @@ class StatusCheckCreate(BaseModel):
     client_name: str
 
 
+PROGRAMS = [
+    "Ingeniería Ambiental",
+    "Ingeniería Biomédica",
+    "Ingeniería de Datos e Inteligencia Artificial",
+    "Ingeniería Eléctrica",
+    "Ingeniería Industrial",
+    "Ingeniería Informática",
+    "Ingeniería Mecánica",
+    "Ingeniería Mecatrónica",
+]
+
+USER_FIELDS = ["user_id", "email", "name", "picture", "custom_username", "program"]
+
+
 class User(BaseModel):
     user_id: str
     email: str
     name: str
     picture: Optional[str] = None
     custom_username: Optional[str] = None
+    program: Optional[str] = None
 
 
 class UsernameUpdate(BaseModel):
     custom_username: str
+    program: Optional[str] = None
 
 
 # ---------- Auth helpers ----------
@@ -167,11 +183,16 @@ async def create_session(request: Request, response: Response):
     return {"user": user}
 
 
+@api_router.get("/programs")
+async def list_programs():
+    return {"programs": PROGRAMS}
+
+
 @api_router.get("/auth/me", response_model=User)
 async def auth_me(current: dict = None, session_token: Optional[str] = Cookie(default=None),
                   authorization: Optional[str] = Header(default=None)):
     user = await get_current_user(session_token=session_token, authorization=authorization)
-    return User(**{k: user.get(k) for k in ["user_id", "email", "name", "picture", "custom_username"]})
+    return User(**{k: user.get(k) for k in USER_FIELDS})
 
 
 @api_router.post("/auth/username", response_model=User)
@@ -186,9 +207,14 @@ async def update_username(payload: UsernameUpdate,
     existing = await db.users.find_one({"custom_username": username, "user_id": {"$ne": user["user_id"]}}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=409, detail="Ese nombre ya está en uso")
-    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"custom_username": username}})
+    updates = {"custom_username": username}
+    if payload.program is not None:
+        if payload.program not in PROGRAMS:
+            raise HTTPException(status_code=400, detail="Programa de ingeniería no válido")
+        updates["program"] = payload.program
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": updates})
     updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
-    return User(**{k: updated.get(k) for k in ["user_id", "email", "name", "picture", "custom_username"]})
+    return User(**{k: updated.get(k) for k in USER_FIELDS})
 
 
 @api_router.post("/auth/logout")

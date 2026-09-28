@@ -4,7 +4,7 @@ import { Bell, Bookmark, BookOpen, CalendarDays, Check, CheckCircle2, ChevronRig
 import './App.css';
 import './fixes.css';
 import { subjects, initialQuestions, initialAnswers, initialTasks, resources as seedResources, notifications, people, groups, type Question, type Answer, type Task } from './data';
-import { authApi, type AuthUser } from './auth';
+import { authApi, PROGRAMS, type AuthUser } from './auth';
 
 const nav = [{to:'/', label:'Inicio', icon:HomeIcon}, {to:'/dudas', label:'Dudas', icon:CircleHelp}, {to:'/grupo', label:'Mi grupo', icon:Users}, {to:'/rutas', label:'Rutas', icon:Lightbulb}];
 const usePersist = <T,>(key:string, initial:T) => { const [value,setValue] = useState<T>(()=>{ try { const saved=localStorage.getItem(key); return saved ? JSON.parse(saved) : initial; } catch { return initial; }}); useEffect(()=>localStorage.setItem(key,JSON.stringify(value)),[key,value]); return [value,setValue] as const; };
@@ -86,11 +86,14 @@ function AuthCallback(){
 // ---------- Onboarding (choose username) ----------
 function Onboarding(){
   const { user, refresh } = useAuth();
-  const [name,setName] = useState('');
+  const [name,setName] = useState(user?.custom_username||'');
+  const [program,setProgram] = useState('');
   const [err,setErr] = useState('');
   const [busy,setBusy] = useState(false);
-  const submit = async (e:React.FormEvent) => { e.preventDefault(); setErr(''); setBusy(true);
-    try { await authApi.setUsername(name.trim()); await refresh(); } catch(ex:any){ setErr(ex.message); } finally { setBusy(false); }
+  const submit = async (e:React.FormEvent) => { e.preventDefault(); setErr('');
+    if(!program){ setErr('Selecciona tu programa de ingeniería.'); return; }
+    setBusy(true);
+    try { await authApi.setUsername(name.trim(), program); await refresh(); } catch(ex:any){ setErr(ex.message); } finally { setBusy(false); }
   };
   return <div className="auth-shell"><div className="auth-card">
     <div className="eyebrow">BIENVENIDA A UAO CONECTA</div>
@@ -102,7 +105,14 @@ function Onboarding(){
         <input id="username" data-testid="username-input" autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder={`Ej. ${(user?.name||'Sofía').split(' ')[0]}`} minLength={2} maxLength={24} required/>
         <small className="muted">Entre 2 y 24 caracteres.</small>
       </div>
-      {err && <div className="form-note" style={{background:'#fde8e8',color:'#a1272b'}}>{err}</div>}
+      <div className="field">
+        <label htmlFor="program">Programa de ingeniería</label>
+        <select id="program" data-testid="program-select" value={program} onChange={e=>setProgram(e.target.value)} required>
+          <option value="" disabled>Selecciona tu programa…</option>
+          {PROGRAMS.map(p=><option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      {err && <div className="form-note" style={{background:'#fde8e8',color:'#a1272b'}} data-testid="onboarding-error">{err}</div>}
       <button className="btn btn-primary" type="submit" disabled={busy} data-testid="submit-username-button">{busy ? 'Guardando…' : 'Continuar'}</button>
     </form>
   </div></div>;
@@ -124,7 +134,7 @@ function Shell({children}:{children:React.ReactNode}) {
       </nav>
       <Link to="/perfil" className="profile-mini" data-testid="sidebar-profile">
         <span className="avatar">{initials(display)}</span>
-        <span><b data-testid="sidebar-username">{display}</b><small>Ingeniería de sistemas</small></span>
+        <span><b data-testid="sidebar-username">{display}</b><small data-testid="sidebar-program">{user?.program || 'Sin programa'}</small></span>
       </Link>
     </aside>
     <main className="main">
@@ -299,7 +309,53 @@ function PeoplePage({kind}:{kind:'docente'|'monitor'}){const list = people.filte
 
 function Resources(){const [saved,setSaved]=usePersist<string[]>('uao-saved-resources',[]);const [subject,setSubject]=useState('Todas');const [type,setType]=useState('Tipo: todos');const list=seedResources.filter(r=>(subject==='Todas'||r.subject===subject)&&(type==='Tipo: todos'||r.type===type));return <div className="content"><PageHead eyebrow="RUTAS · RECURSOS" title="Materiales para seguir avanzando." description="Una colección local de demostración, organizada para encontrar lo que necesitas."/><div className="filters"><select className="select" value={subject} onChange={e=>setSubject(e.target.value)} data-testid="resource-subject-filter"><option>Todas</option>{subjects.map(s=><option key={s.id}>{s.name}</option>)}</select><select className="select" value={type} onChange={e=>setType(e.target.value)} data-testid="resource-type-filter"><option>Tipo: todos</option><option>Guía</option><option>Apunte</option><option>Documento</option><option>Material de estudio</option></select></div><div className="resource-grid">{list.map(r=><div className="resource" key={r.id}><div className="resource-top"><span className="status resolved"><CheckCircle2 size={12}/> Recurso de demostración</span><button className="icon-btn" onClick={()=>setSaved(saved.includes(r.id)?saved.filter(x=>x!==r.id):[...saved,r.id])} data-testid={`bookmark-resource-${r.id}`}><Bookmark size={15} fill={saved.includes(r.id)?'currentColor':'none'}/></button></div><h3>{r.name}</h3><p>{r.description}</p><div className="meta"><span>{r.subject}</span><span>·</span><span>{r.type}</span><span>·</span><span>{r.date}</span></div></div>)}</div></div>;}
 
-function Profile(){const { user, refresh } = useAuth();const [editing,setEditing]=useState(false);const [name,setName]=useState(user?.custom_username||'');const [err,setErr]=useState('');const [toast,setToast]=useState('');const save = async (e:React.FormEvent) => { e.preventDefault(); setErr(''); try { await authApi.setUsername(name.trim()); await refresh(); setEditing(false); setToast('Nombre actualizado.'); } catch(ex:any){ setErr(ex.message); } };return <div className="content"><PageHead eyebrow="MI INFORMACIÓN" title="Tu perfil académico." description="Un resumen para que las personas sepan a quién están leyendo. No es una red social."/><div className="profile-cover"/><div className="profile-body"><div className="avatar profile-avatar">{initials(user?.custom_username||user?.name)}</div>{!editing?<><h2 style={{fontFamily:'Space Grotesk',marginBottom:4}} data-testid="profile-name">{user?.custom_username || user?.name || 'Usuario'}</h2><span className="muted">{user?.email}</span><button className="btn btn-light btn-small" style={{marginLeft:12}} onClick={()=>{setName(user?.custom_username||'');setEditing(true);}} data-testid="edit-username-button">Editar nombre</button></>:<form className="form" onSubmit={save} style={{maxWidth:420}}><div className="field"><label htmlFor="pname">Nombre visible</label><input id="pname" value={name} onChange={e=>setName(e.target.value)} minLength={2} maxLength={24} required data-testid="edit-username-input"/></div>{err&&<div className="form-note" style={{background:'#fde8e8',color:'#a1272b'}}>{err}</div>}<div style={{display:'flex',gap:8}}><button type="button" className="btn btn-light btn-small" onClick={()=>setEditing(false)}>Cancelar</button><button type="submit" className="btn btn-primary btn-small" data-testid="save-username-button">Guardar</button></div></form>}<div className="section"><div className="stat-row"><div className="stat"><span className="eyebrow">ASIGNATURAS</span><strong>4</strong></div><div className="stat"><span className="eyebrow">DUDAS REALIZADAS</span><strong>12</strong></div><div className="stat"><span className="eyebrow">GUARDADOS</span><strong>8</strong></div></div><h3 className="eyebrow">MIS ASIGNATURAS</h3><div className="tags">{subjects.map(s=><span className="tag" key={s.id}>{s.name}</span>)}</div></div></div>{toast&&<Toast message={toast} onClose={()=>setToast('')}/>}</div>;}
+function Profile(){
+  const { user, refresh } = useAuth();
+  const [editing,setEditing]=useState(false);
+  const [name,setName]=useState(user?.custom_username||'');
+  const [program,setProgram]=useState(user?.program||'');
+  const [err,setErr]=useState('');
+  const [toast,setToast]=useState('');
+  const startEdit=()=>{setName(user?.custom_username||'');setProgram(user?.program||'');setErr('');setEditing(true);};
+  const save = async (e:React.FormEvent) => { e.preventDefault(); setErr('');
+    if(!program){ setErr('Selecciona tu programa de ingeniería.'); return; }
+    try { await authApi.setUsername(name.trim(), program); await refresh(); setEditing(false); setToast('Perfil actualizado.'); } catch(ex:any){ setErr(ex.message); }
+  };
+  return <div className="content">
+    <PageHead eyebrow="MI INFORMACIÓN" title="Tu perfil académico." description="Un resumen para que las personas sepan a quién están leyendo. No es una red social."/>
+    <div className="profile-cover"/>
+    <div className="profile-body">
+      <div className="avatar profile-avatar">{initials(user?.custom_username||user?.name)}</div>
+      {!editing
+        ? <>
+            <h2 style={{fontFamily:'Space Grotesk',marginBottom:4}} data-testid="profile-name">{user?.custom_username || user?.name || 'Usuario'}</h2>
+            <span className="muted">{user?.email}</span>
+            <div style={{marginTop:8}}><span className="tag" data-testid="profile-program">{user?.program || 'Programa no definido'}</span></div>
+            <button className="btn btn-light btn-small" style={{marginTop:12}} onClick={startEdit} data-testid="edit-username-button">Editar perfil</button>
+          </>
+        : <form className="form" onSubmit={save} style={{maxWidth:420}}>
+            <div className="field"><label htmlFor="pname">Nombre visible</label><input id="pname" value={name} onChange={e=>setName(e.target.value)} minLength={2} maxLength={24} required data-testid="edit-username-input"/></div>
+            <div className="field"><label htmlFor="pprogram">Programa de ingeniería</label>
+              <select id="pprogram" value={program} onChange={e=>setProgram(e.target.value)} required data-testid="edit-program-select">
+                <option value="" disabled>Selecciona tu programa…</option>
+                {PROGRAMS.map(p=><option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            {err&&<div className="form-note" style={{background:'#fde8e8',color:'#a1272b'}} data-testid="profile-error">{err}</div>}
+            <div style={{display:'flex',gap:8}}>
+              <button type="button" className="btn btn-light btn-small" onClick={()=>setEditing(false)} data-testid="cancel-edit-profile-button">Cancelar</button>
+              <button type="submit" className="btn btn-primary btn-small" data-testid="save-username-button">Guardar</button>
+            </div>
+          </form>}
+      <div className="section">
+        <div className="stat-row"><div className="stat"><span className="eyebrow">ASIGNATURAS</span><strong>4</strong></div><div className="stat"><span className="eyebrow">DUDAS REALIZADAS</span><strong>12</strong></div><div className="stat"><span className="eyebrow">GUARDADOS</span><strong>8</strong></div></div>
+        <h3 className="eyebrow">MIS ASIGNATURAS</h3>
+        <div className="tags">{subjects.map(s=><span className="tag" key={s.id}>{s.name}</span>)}</div>
+      </div>
+    </div>
+    {toast&&<Toast message={toast} onClose={()=>setToast('')}/>}
+  </div>;
+}
 
 function Notifications(){const [items,setItems]=useState(notifications);return <div className="content"><PageHead eyebrow="TU INFORMACIÓN" title="Notificaciones." description="Lo importante de tu espacio académico, en un solo lugar." action={<button className="btn btn-light" onClick={()=>setItems(items.map(n=>({...n,read:true})))} data-testid="mark-all-read-button"><Check size={16}/>Marcar todas como leídas</button>}/><div className="panel">{items.map(n=><div className={`activity-row ${n.read?'':'unread'}`} key={n.id}><span className="activity-dot" style={{background:n.read?'#bbc7d1':'var(--red)'}}/><span>{n.text}<small className="muted" style={{display:'block',marginTop:5}}>{n.time}</small></span>{!n.read&&<button className="btn btn-light btn-small" onClick={()=>setItems(items.map(x=>x.id===n.id?{...x,read:true}:x))} data-testid={`mark-read-${n.id}`}>Marcar leída</button>}</div>)}</div></div>;}
 
@@ -313,7 +369,7 @@ function AppRouter(){
   if (location.hash?.includes('session_id=')) return <AuthCallback/>;
   if (loading) return <div className="auth-shell"><div className="auth-card"><h1>Cargando…</h1></div></div>;
   if (!user) return <Login/>;
-  if (!user.custom_username) return <Onboarding/>;
+  if (!user.custom_username || !user.program) return <Onboarding/>;
   return <Shell><Routes>
     <Route path="/" element={<Home/>}/>
     <Route path="/inicio" element={<Home/>}/>
