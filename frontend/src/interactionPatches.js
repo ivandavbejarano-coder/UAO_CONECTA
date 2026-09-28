@@ -44,6 +44,7 @@ const handleInteractions = (event) => {
 
 export const installInteractionPatches = () => {
   syncQuestions();
+  window.setInterval(syncQuestions, 300);
   document.addEventListener('change', handleInteractions);
   document.addEventListener('click', handleInteractions);
 };
