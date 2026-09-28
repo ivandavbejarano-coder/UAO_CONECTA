@@ -1,0 +1,30 @@
+{
+  "summary": "Validated new auth flow (Emergent Google Auth) and grouped global search in Home. Backend: 11/11 pytest tests passed for /api/auth/me, /api/auth/username (2-24 length + uniqueness 409), /api/auth/logout (session invalidation) and root. Frontend: Login page with google-signin-button, Onboarding shown when custom_username is null and persists to sidebar-username, grouped search in Home works with 4 group testids and filter/clear-filters, Profile edit-username updates sidebar via /api/auth/username, new question flow, task creation, and logout redirecting to Login all work. Existing flows smoke-tested OK.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py auth_me route defines unused `current` parameter (None) — cosmetic; not a functional bug.",
+    "App.tsx is a 339-line single file mixing many components; consider splitting for maintainability (>300 lines threshold approaching).",
+    "Uniqueness check for custom_username is a simple find_one — under concurrency two users could set same name; consider a unique index on users.custom_username for stronger guarantees.",
+    "logout returns 200 even when no token is supplied; harmless but could return 401 for clarity."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auth_api.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Seeded MongoDB users/user_sessions in test_database with TEST_ prefix; tokens are ephemeral per test run.",
+  "seed_data_creation": "Backend tests create/cleanup TEST_ users+sessions per module. Frontend test seeded two throwaway users (onboarding + ready) directly in Mongo.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auth uses cookie session_token (sameSite=None/secure) AND Authorization: Bearer <token>; both paths tested and working. To bypass Google OAuth for UI testing, seed users+user_sessions in Mongo and set the session_token cookie for the preview domain via playwright add_cookies. Beware that calling /api/auth/logout deletes the session row, so if you re-use the same token afterwards you must re-seed it. Grouped search testids: search-group-{dudas|personas|recursos|grupos|asignaturas}; filters: search-filter-{subject|type|status}; clear-filters-button.",
+  "rca of the issue": "No production bugs found. Only test-scaffolding issue: after step 8 (logout) the seeded READY session was deleted server-side, causing the subsequent responsive re-login step to see the Login page. Non-blocking."
+}
