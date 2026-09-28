@@ -57,6 +57,13 @@ Construir **UAO Conecta**, una SPA React + TypeScript funcional para estudiantes
 - Iteración 4: backend 100%, frontend 100%, sin bugs abiertos.
 - test_credentials.md actualizado con snippet para crear session en Mongo.
 
+## Actualización puntual (2026-09-28) — Título de página
+- Solicitud: cambiar `<title>` en `frontend/public/index.html` a `UAO CONECTA` y eliminar el enlace “Made with Emergent”, sin modificar otras funciones.
+- Título actualizado. El enlace ya estaba ausente del archivo; no se necesitó eliminar ningún `<a>` ni cambiar scripts.
+- Verificación en preview con navegador: `document.title` igual a `UAO CONECTA`, cero enlaces “Made with Emergent”, aplicación visible en escritorio 1920×800 y móvil 390×844; sin desbordamiento horizontal móvil.
+- El servidor ignoraba cambios en `public`; se solicitó recompilación para reflejar el título sin modificar configuración ni funciones.
+- P0 de esta solicitud: ninguno pendiente. Backlog previo sin cambios; mejora opcional futura: favicon propio para identificar UAO Conecta en pestañas.
+
 ## Backlog (prioridades)
 - **P1** Migración real a Vite (usuario lo prefirió). Cambiar scripts, adaptar `process.env.REACT_APP_BACKEND_URL` → `import.meta.env.VITE_BACKEND_URL`, eliminar CRACO/react-scripts.
 - **P1** Modularizar `App.tsx` en `pages/`, `components/`, `hooks/useLocalStorage.ts`, `layouts/`.
